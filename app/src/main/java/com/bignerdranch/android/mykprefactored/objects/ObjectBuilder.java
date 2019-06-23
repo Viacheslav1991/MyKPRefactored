@@ -3,6 +3,7 @@ package com.bignerdranch.android.mykprefactored.objects;
 import java.util.ArrayList;
 import java.util.List;
 
+import static android.opengl.GLES20.GL_TRIANGLES;
 import static android.opengl.GLES20.GL_TRIANGLE_FAN;
 import static android.opengl.GLES20.GL_TRIANGLE_STRIP;
 import static android.opengl.GLES20.glDrawArrays;

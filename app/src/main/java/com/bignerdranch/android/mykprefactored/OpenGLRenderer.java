@@ -9,52 +9,40 @@ import android.util.Log;
 import com.bignerdranch.android.mykprefactored.objects.Axes;
 import com.bignerdranch.android.mykprefactored.objects.FullCylinder;
 import com.bignerdranch.android.mykprefactored.objects.FullTorus;
-import com.bignerdranch.android.mykprefactored.objects.ObjectBuilder;
 import com.bignerdranch.android.mykprefactored.objects.Sphere;
-import com.bignerdranch.android.mykprefactored.objects.Tetrahedron;
+import com.bignerdranch.android.mykprefactored.objects.TetrahedronColor;
+import com.bignerdranch.android.mykprefactored.objects.TetrahedronTexture;
 import com.bignerdranch.android.mykprefactored.programs.ColorShaderProgram;
+import com.bignerdranch.android.mykprefactored.programs.TextureShaderProgram;
 import com.bignerdranch.android.mykprefactored.util.Geometry;
-import com.bignerdranch.android.mykprefactored.util.Vector;
+import com.bignerdranch.android.mykprefactored.util.TextureHelper;
 
 import java.io.Serializable;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 import static android.opengl.GLES20.GL_ALWAYS;
+import static android.opengl.GLES20.GL_BLEND;
 import static android.opengl.GLES20.GL_COLOR_BUFFER_BIT;
 import static android.opengl.GLES20.GL_EQUAL;
-import static android.opengl.GLES20.GL_FLOAT;
 import static android.opengl.GLES20.GL_KEEP;
-import static android.opengl.GLES20.GL_LINES;
+import static android.opengl.GLES20.GL_ONE;
 import static android.opengl.GLES20.GL_REPLACE;
 import static android.opengl.GLES20.GL_STENCIL_BUFFER_BIT;
 import static android.opengl.GLES20.GL_STENCIL_TEST;
-import static android.opengl.GLES20.GL_TRIANGLE_FAN;
-import static android.opengl.GLES20.GL_TRIANGLE_STRIP;
+import static android.opengl.GLES20.glBlendFunc;
 import static android.opengl.GLES20.glClear;
 import static android.opengl.GLES20.glClearColor;
 import static android.opengl.GLES20.glDisable;
-import static android.opengl.GLES20.glDrawArrays;
-import static android.opengl.GLES20.glEnableVertexAttribArray;
-import static android.opengl.GLES20.glGetAttribLocation;
-import static android.opengl.GLES20.glGetUniformLocation;
 import static android.opengl.GLES20.glStencilFunc;
 import static android.opengl.GLES20.glStencilOp;
-import static android.opengl.GLES20.glUniform4f;
 import static android.opengl.GLES20.glVertexAttribPointer;
 import static android.opengl.GLES20.glViewport;
 import static android.opengl.GLES20.glUniformMatrix4fv;
-import static android.opengl.GLES20.GL_TRIANGLES;
 import static android.opengl.GLES20.GL_DEPTH_BUFFER_BIT;
 import static android.opengl.GLES20.GL_DEPTH_TEST;
 import static android.opengl.GLES20.glEnable;
-import static android.opengl.GLES20.glLineWidth;
 import static android.opengl.Matrix.setIdentityM;
 import static java.lang.Math.*;
 
@@ -67,16 +55,9 @@ public class OpenGLRenderer implements Renderer, Serializable {
 
     private Context context;
 
-    private FloatBuffer vertexData;
-    private int uColorLocation;
-    private int aPositionLocation;
-    private int uMatrixLocation;
-    private int programId;
     private final static long TIME = 10000L;
     private float tetrahedronAngleMultiplier = 2.5f;
     private float sphereAngleMultiplier = 2.5f;
-    private int offset = 0;
-    private float verticesInCylinder[];
 
 
     private float[] mProjectionMatrix = new float[16];
@@ -106,12 +87,15 @@ public class OpenGLRenderer implements Renderer, Serializable {
 
     private FullTorus mTorus;
     private FullCylinder mCylinder;
-    private Tetrahedron mTetrahedron;
+    private TetrahedronTexture mTetrahedronTexture;
+    private TetrahedronColor mTetrahedronColor;
     private Sphere mSphere;
     private Axes mAxes;
     // Programs
 
     private ColorShaderProgram mColorShaderProgram;
+    private TextureShaderProgram mTextureShaderProgram;
+    private int texture;
 
     public OpenGLRenderer(Context context) {
         this.context = context;
@@ -125,11 +109,14 @@ public class OpenGLRenderer implements Renderer, Serializable {
 
         mCylinder = new FullCylinder(0.5f, 1f, 50);
         mTorus = new FullTorus(0.15f, 0.5f, 50);
-        mTetrahedron = new Tetrahedron();
         mSphere = new Sphere(1f, 50, new Geometry.Point(0, 0, 0));
         mAxes = new Axes(3);
+        mTetrahedronColor = new TetrahedronColor();
 
         mColorShaderProgram = new ColorShaderProgram(context);
+        mTextureShaderProgram = new TextureShaderProgram(context);
+
+        texture = TextureHelper.loadTexture(context, R.drawable.texture);
 
         /*int vertexShaderId = ShaderUtils.createShader(context, GL_VERTEX_SHADER, R.raw.vert_shader);
         int fragmentShaderId = ShaderUtils.createShader(context, GL_FRAGMENT_SHADER, R.raw.fragment_shader);
@@ -155,7 +142,6 @@ public class OpenGLRenderer implements Renderer, Serializable {
         createViewMatrix();
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-        mColorShaderProgram.useProgram();
 
         fillStencil();
 
@@ -169,7 +155,9 @@ public class OpenGLRenderer implements Renderer, Serializable {
 
         glEnable(GL_STENCIL_TEST);
 
-        drawTetrahedron();
+        drawTetrahedronWithHole();
+
+
 
         /*
         //draw Sphere
@@ -205,44 +193,71 @@ public class OpenGLRenderer implements Renderer, Serializable {
     }
 
     private void drawAxes() {
-        setIdentityM(mModelMatrix,0);
+        setIdentityM(mModelMatrix, 0);
         mulMatrix();
+        mColorShaderProgram.useProgram();
         mAxes.bindData(mColorShaderProgram);
         mAxes.draw(mMatrix);
+
     }
 
     private void drawCylinder() {
-        setIdentityM(mModelMatrix,0);
+        setIdentityM(mModelMatrix, 0);
         float angle = (float) (SystemClock.uptimeMillis() % TIME) / TIME * 360;
-        Matrix.rotateM(mModelMatrix, 0, angle*sphereAngleMultiplier, 1, 0, 0);
+        Matrix.rotateM(mModelMatrix, 0, angle * sphereAngleMultiplier, 1, 0, 0);
         mulMatrix();
-        mColorShaderProgram.setUniforms(mMatrix, 1f, 0f, 0f);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+
+        mColorShaderProgram.useProgram();
+        mColorShaderProgram.setUniforms(mMatrix, 0.5f, 0f, 0f);
         mCylinder.bindData(mColorShaderProgram);
         mCylinder.draw();
+
+        glDisable(GL_BLEND);
     }
 
     private void drawTorus() {
         //draw Torus
-        setIdentityM(mModelMatrix,0);
+        setIdentityM(mModelMatrix, 0);
         float angle = (float) (SystemClock.uptimeMillis() % TIME) / TIME * 360;
-        Matrix.rotateM(mModelMatrix, 0, angle*sphereAngleMultiplier, 1, 0, 0);
-        Matrix.rotateM(mModelMatrix,0,90,1,0,0);
+        Matrix.rotateM(mModelMatrix, 0, angle * sphereAngleMultiplier, 1, 0, 0);
+        Matrix.rotateM(mModelMatrix, 0, 90, 1, 0, 0);
         mulMatrix();
-        mColorShaderProgram.setUniforms(mMatrix, 0, 1, 0);
+        mColorShaderProgram.useProgram();
+        mColorShaderProgram.setUniforms(mMatrix, 0, 0, 1);
         mTorus.bindData(mColorShaderProgram);
         mTorus.draw();
     }
 
-    private void drawTetrahedron() {
-        //draw Tetrahedron
+    /*private void drawTetrahedron() {
+        //draw TetrahedronTexture
         setIdentityM(mModelMatrix,0);
+        *//*float angle = (float) (SystemClock.uptimeMillis() % TIME) / TIME * 360;
+        Matrix.rotateM(mModelMatrix, 0, angle * tetrahedronAngleMultiplier, 0, 1, 1);*//*
+        mulMatrix();
+//        glStencilFunc(GL_EQUAL, 1, 255);
+        mColorShaderProgram.setUniforms(mMatrix,0,0,1);
+        mTetrahedronTexture.bindData(mColorShaderProgram);
+        mTetrahedronTexture.draw();
+    }*/
+    private void drawTetrahedronWithHole() {
+        //draw TetrahedronTexture
+        setIdentityM(mModelMatrix, 0);
         float angle = (float) (SystemClock.uptimeMillis() % TIME) / TIME * 360;
         Matrix.rotateM(mModelMatrix, 0, angle * tetrahedronAngleMultiplier, 0, 1, 1);
         mulMatrix();
         glStencilFunc(GL_EQUAL, 1, 255);
-        mColorShaderProgram.setUniforms(mMatrix,0,0,1);
-        mTetrahedron.bindData(mColorShaderProgram);
-        mTetrahedron.draw();
+        drawTetrahedron();
+    }
+
+    private void drawTetrahedron() {
+        //draw TetrahedronTexture
+        mColorShaderProgram.useProgram();
+        mColorShaderProgram.setUniforms(mMatrix, 0, 1, 0);
+        mTetrahedronColor.bindData(mColorShaderProgram);
+        mTetrahedronColor.draw();
     }
 
     private void createProjectionMatrix(int width, int height) {
@@ -287,24 +302,22 @@ public class OpenGLRenderer implements Renderer, Serializable {
     }
 
     private void mulMatrix() {
-
         Matrix.multiplyMM(mMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
         Matrix.multiplyMM(mMatrix, 0, mProjectionMatrix, 0, mMatrix, 0);
 //        glUniformMatrix4fv(uMatrixLocation, 1, false, mMatrix, 0);
     }
 
     private void fillStencil() {
-        // куб в буфер
+        // тетраэдр в буфер
         glStencilFunc(GL_ALWAYS, 1, 0);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        mColorShaderProgram.setUniforms(mMatrix,0,1,0);
-        mTetrahedron.bindData(mColorShaderProgram);
-        mTetrahedron.draw();
+        drawTetrahedron();
 
         // Сфера в буфер
+        mColorShaderProgram.useProgram();
+        mColorShaderProgram.setUniforms(mMatrix, 0, 1, 1);
         glStencilFunc(GL_ALWAYS, 2, 0);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-        mColorShaderProgram.setUniforms(mMatrix, 0, 1, 1);
         mSphere.bindData(mColorShaderProgram);
         mSphere.draw();
     }

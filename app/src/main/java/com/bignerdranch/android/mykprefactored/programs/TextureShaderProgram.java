@@ -22,24 +22,24 @@ import static android.opengl.GLES20.glGetUniformLocation;
 import static android.opengl.GLES20.glUniform1i;
 import static android.opengl.GLES20.glUniformMatrix4fv;
 
-public class TextureShaderProgram extends ShaderProgram {    
+public class TextureShaderProgram extends ShaderProgram {
     // Uniform locations
     private final int uMatrixLocation;
     private final int uTextureUnitLocation;
-    
+
     // Attribute locations
     private final int aPositionLocation;
     private final int aTextureCoordinatesLocation;
 
     public TextureShaderProgram(Context context) {
         super(context, R.raw.texture_vertex_shader,
-            R.raw.texture_fragment_shader);
+                R.raw.texture_fragment_shader);
 
         // Retrieve uniform locations for the shader program.
         uMatrixLocation = glGetUniformLocation(program, U_MATRIX);
         uTextureUnitLocation = glGetUniformLocation(program,
-            U_TEXTURE_UNIT);
-        
+                U_TEXTURE_UNIT);
+
         // Retrieve attribute locations for the shader program.
         aPositionLocation = glGetAttribLocation(program, A_POSITION);
         aTextureCoordinatesLocation = glGetAttribLocation(program, A_TEXTURE_COORDINATES);
@@ -59,7 +59,7 @@ public class TextureShaderProgram extends ShaderProgram {
         // telling it to read from texture unit 0.
         glUniform1i(uTextureUnitLocation, 0);
     }
-    
+
     public int getPositionAttributeLocation() {
         return aPositionLocation;
     }

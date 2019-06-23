@@ -12,6 +12,7 @@ import android.content.Context;
 
 import com.bignerdranch.android.mykprefactored.util.FileUtils;
 import com.bignerdranch.android.mykprefactored.util.ShaderHelper;
+import com.bignerdranch.android.mykprefactored.util.TextResourceReader;
 
 import static android.opengl.GLES20.glUseProgram;
 
@@ -33,11 +34,11 @@ abstract class ShaderProgram {
                             int fragmentShaderResourceId) {
         // Compile the shaders and link the program.
         program = ShaderHelper.buildProgram(
-            FileUtils
-                .readTextFromRaw(context, vertexShaderResourceId),
-            FileUtils
-                .readTextFromRaw(context, fragmentShaderResourceId));
-    }        
+                TextResourceReader
+                        .readTextFileFromResource(context, vertexShaderResourceId),
+                TextResourceReader
+                        .readTextFileFromResource(context, fragmentShaderResourceId));
+    }
 
     public void useProgram() {
         // Set the current OpenGL shader program to this program.
